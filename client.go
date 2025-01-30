@@ -114,6 +114,7 @@ func (c *UploadData) Init() error {
 		var reader io.Reader = file
 
 		c.reader = &reader
+		c.file = file
 	}
 
 	defer c.Close()
