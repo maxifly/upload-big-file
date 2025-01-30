@@ -203,7 +203,7 @@ func (c *UploadData) uploadChunk(i uint64) {
 		}
 
 		partBuffer := make([]byte, partSize)
-		readBytes, err := c.file.Read(partBuffer)
+		readBytes, err := io.ReadFull(*c.reader, partBuffer)
 		if err != nil {
 			c.logger.ErrorLog.Println(err)
 			c.uploadDone(true)
