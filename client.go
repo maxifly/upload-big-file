@@ -2,6 +2,7 @@ package uploadbig
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"log"
 	"math"
@@ -26,6 +27,7 @@ type UploadData struct {
 	method    string
 	url       string
 	filePath  string
+	reader    *io.Reader
 	id        string
 	chunkSize int
 	file      *os.File
@@ -43,8 +45,27 @@ type UploadStatus struct {
 	TransferredException bool
 }
 
-// New creates new instance
-func New(method string, url string, filePath string, client *http.Client, chunkSize int,
+func NewUploaderFromReader(method string, url string, reader *io.Reader, size int64, client *http.Client, chunkSize int,
+	logger *Logger) *UploadData {
+
+	uploader := createUploader(method, url, client, chunkSize, logger)
+
+	uploader.reader = reader
+	uploader.Status.Size = size
+	return uploader
+}
+
+// NewUploaderFromFile  creates new uploader instance
+func NewUploaderFromFile(method string, url string, filePath string, client *http.Client, chunkSize int,
+	logger *Logger) *UploadData {
+
+	uploader := createUploader(method, url, client, chunkSize, logger)
+
+	uploader.filePath = filePath
+	return uploader
+}
+
+func createUploader(method string, url string, client *http.Client, chunkSize int,
 	logger *Logger) *UploadData {
 
 	if logger == nil {
@@ -59,7 +80,6 @@ func New(method string, url string, filePath string, client *http.Client, chunkS
 		client:    client,
 		method:    method,
 		url:       url,
-		filePath:  filePath,
 		id:        generateSessionID(),
 		chunkSize: chunkSize,
 		logger:    *logger,
@@ -78,30 +98,40 @@ func New(method string, url string, filePath string, client *http.Client, chunkS
 
 // Init method initializes uploadFile
 func (c *UploadData) Init() error {
-	fileStat, err := os.Stat(c.filePath)
-	if c.checkError(err) {
-		return err
-	}
 
-	c.Status.Size = fileStat.Size()
-	c.Status.Parts = uint64(math.Ceil(float64(c.Status.Size) / float64(c.chunkSize)))
+	if c.filePath != "" {
+		fileStat, err := os.Stat(c.filePath)
+		if c.checkError(err) {
+			return err
+		}
 
-	c.file, err = os.Open(c.filePath)
-	if c.checkError(err) {
-		return err
+		c.Status.Size = fileStat.Size()
+		file, err := os.Open(c.filePath)
+		if c.checkError(err) {
+			return err
+		}
+
+		var reader io.Reader = file
+
+		c.reader = &reader
 	}
 
 	defer c.Close()
+	c.Status.Parts = uint64(math.Ceil(float64(c.Status.Size) / float64(c.chunkSize)))
 	c.uploadFile()
 	c.logger.InfoLog.Printf("Done\n")
 	return nil
 }
 
 func (c *UploadData) Close() {
-	c.logger.DebugLog.Printf("Close file %s\n", c.filePath)
-	err := c.file.Close()
-	if err != nil {
-		c.logger.ErrorLog.Println(err)
+	c.logger.DebugLog.Printf("Close uploader %s\n", c.id)
+
+	if c.filePath != "" {
+		c.logger.DebugLog.Printf("Close file %s\n", c.filePath)
+		err := c.file.Close()
+		if err != nil {
+			c.logger.ErrorLog.Println(err)
+		}
 	}
 }
 
