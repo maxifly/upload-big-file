@@ -223,7 +223,7 @@ func (c *UploadData) uploadChunk(i uint64) {
 		var errorCount = 0
 
 		for !isSuccess && errorCount < 3 {
-			isSuccess, responseBody, err = httpRequest(c.method, c.url, c.client, c.id, partBuffer, contentRange, fileName, c.logger.DebugLog)
+			isSuccess, responseBody, err = httpRequest(c.method, c.url, c.additionalHeaders, c.client, c.id, partBuffer, contentRange, fileName, c.logger.DebugLog)
 			c.logger.DebugLog.Printf("isSuccess: %t \n", isSuccess)
 			if err != nil {
 				c.logger.ErrorLog.Println(err)
