@@ -23,16 +23,17 @@ type Logger struct {
 
 // UploadData structure
 type UploadData struct {
-	client    *http.Client
-	method    string
-	url       string
-	filePath  string
-	reader    *io.Reader
-	id        string
-	chunkSize int
-	file      *os.File
-	Status    UploadStatus
-	logger    Logger
+	client            *http.Client
+	method            string
+	url               string
+	filePath          string
+	reader            *io.Reader
+	id                string
+	chunkSize         int
+	file              *os.File
+	Status            UploadStatus
+	logger            Logger
+	additionalHeaders map[string]string
 }
 
 // UploadStatus holds the data about uploadFile
@@ -45,10 +46,11 @@ type UploadStatus struct {
 	TransferredException bool
 }
 
-func NewUploaderFromReader(method string, url string, reader *io.Reader, size int64, client *http.Client, chunkSize int,
+func NewUploaderFromReader(method string, url string, reader *io.Reader, size int64, additionalHeaders map[string]string,
+	client *http.Client, chunkSize int,
 	logger *Logger) *UploadData {
 
-	uploader := createUploader(method, url, client, chunkSize, logger)
+	uploader := createUploader(method, url, additionalHeaders, client, chunkSize, logger)
 
 	uploader.reader = reader
 	uploader.Status.Size = size
@@ -56,16 +58,17 @@ func NewUploaderFromReader(method string, url string, reader *io.Reader, size in
 }
 
 // NewUploaderFromFile  creates new uploader instance
-func NewUploaderFromFile(method string, url string, filePath string, client *http.Client, chunkSize int,
+func NewUploaderFromFile(method string, url string, filePath string, additionalHeaders map[string]string,
+	client *http.Client, chunkSize int,
 	logger *Logger) *UploadData {
 
-	uploader := createUploader(method, url, client, chunkSize, logger)
+	uploader := createUploader(method, url, additionalHeaders, client, chunkSize, logger)
 
 	uploader.filePath = filePath
 	return uploader
 }
 
-func createUploader(method string, url string, client *http.Client, chunkSize int,
+func createUploader(method string, url string, additionalHeaders map[string]string, client *http.Client, chunkSize int,
 	logger *Logger) *UploadData {
 
 	if logger == nil {
@@ -77,12 +80,13 @@ func createUploader(method string, url string, client *http.Client, chunkSize in
 	}
 
 	uploadData := &UploadData{
-		client:    client,
-		method:    method,
-		url:       url,
-		id:        generateSessionID(),
-		chunkSize: chunkSize,
-		logger:    *logger,
+		client:            client,
+		method:            method,
+		url:               url,
+		id:                generateSessionID(),
+		chunkSize:         chunkSize,
+		logger:            *logger,
+		additionalHeaders: additionalHeaders,
 		Status: UploadStatus{
 			Size:                 0,
 			SizeTransferred:      0,
@@ -219,7 +223,7 @@ func (c *UploadData) uploadChunk(i uint64) {
 		var errorCount = 0
 
 		for !isSuccess && errorCount < 3 {
-			isSuccess, responseBody, err = httpRequest(c.method, c.url, c.client, c.id, partBuffer, contentRange, fileName, c.logger.DebugLog)
+			isSuccess, responseBody, err = httpRequest(c.method, c.url, c.additionalHeaders, c.client, c.id, partBuffer, contentRange, fileName, c.logger.DebugLog)
 			c.logger.DebugLog.Printf("isSuccess: %t \n", isSuccess)
 			if err != nil {
 				c.logger.ErrorLog.Println(err)
@@ -246,6 +250,7 @@ func (c *UploadData) uploadChunk(i uint64) {
 
 func httpRequest(method string,
 	url string,
+	additionalHeaders map[string]string,
 	client *http.Client,
 	sessionID string,
 	part []byte,
@@ -261,6 +266,12 @@ func httpRequest(method string,
 	request.Header.Add("Content-Disposition", "attachment; filename=\""+fileName+"\"")
 	request.Header.Add("Content-Range", contentRange)
 	request.Header.Add("Session-ID", sessionID)
+
+	if additionalHeaders != nil {
+		for key, value := range additionalHeaders {
+			request.Header.Add(key, value)
+		}
+	}
 
 	response, err := client.Do(request)
 	if err != nil {
